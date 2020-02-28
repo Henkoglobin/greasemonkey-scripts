@@ -9,7 +9,7 @@
 
 (function() {
 	function updateTotalTime() {
-		const sum = [...document.querySelectorAll('#week_time_chart text')].map(x => x.innerHTML).filter(x => !isNaN(x)).reduce((x, y) => +x + +y);
+		const sum = [...document.querySelectorAll('#week-chart text')].map(x => x.innerHTML).filter(x => !isNaN(x)).reduce((x, y) => +x + +y);
 		document.querySelector('#week-chart .desktop-panel-heading h2').innerHTML = `Week statistics (${sum}h)`;
 	}
 
