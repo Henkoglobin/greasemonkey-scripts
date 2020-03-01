@@ -80,6 +80,7 @@
     /**
      * Preparation of months because ajayWeekTimeReport return whole week
      * (also including Days of previous or following months)
+     * Also enchric target per day and moment date
      * @param {Array} data
      * @param {Date} startOfMonth
      * @param {Date} endOfMonth
@@ -97,6 +98,14 @@
             const carryover = 6 - endOfMonthWeekDay;
             data.splice(-carryover, carryover);
         }
+
+        let dateCounter = 0;
+        data.forEach((item) => {
+            item.momentDate = startOfMonth.clone().add(dateCounter, 'day');
+            item.targetHours = helper.getDateTargetHours(item.momentDate);
+            item.balance = item.value - item.targetHours;
+            dateCounter++;
+        });
 
         return data;
     }
@@ -149,7 +158,13 @@
                 title: 'Target',
                 value: data.filter((x) => x.day !== 'Sat' && x.day !== 'Sun').length * DAILY_WORK_HOURS,
             },
+            {
+                title: 'Balance (today)',
+                value: data.filter((x) => x.momentDate <= moment()).sum((x) => x.balance),
+            },
         ];
+
+        console.log({ data });
 
         const $comparisonDiv = $(`#${helper.getMonthDivComparisonId(startOfMonth)}`);
         $comparisonDiv.empty();
@@ -172,6 +187,8 @@
                 let weekday = momentDate.weekday();
                 return weekday === 0 ? 6 : weekday - 1;
             },
+            getDateTargetHours: (momentDate) =>
+                momentDate.weekday() > 0 && momentDate.weekday() < 6 ? DAILY_WORK_HOURS : 0,
         };
     }
 })();
