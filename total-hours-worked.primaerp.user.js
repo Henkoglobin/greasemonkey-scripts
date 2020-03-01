@@ -8,12 +8,12 @@
 // ==/UserScript==
 
 (function() {
-  function updateTotalTime() {
-    if (window.weekChartData) {
-      const sum = window.weekChartData.sum((x) => x.value);
-      document.querySelector('#week-chart .desktop-panel-heading h2').innerHTML = `Week statistics (${sum}h)`;
+    function updateTotalTime() {
+        if (window.weekChartData) {
+            const sum = window.weekChartData.sum((x) => x.value);
+            document.querySelector('#week-chart .desktop-panel-heading h2').innerHTML = `Week statistics (${sum}h)`;
+        }
     }
-  }
 
-  window.setInterval(updateTotalTime, 1000);
+    window.setInterval(updateTotalTime, 1000);
 })();
