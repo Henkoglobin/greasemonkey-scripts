@@ -9,11 +9,27 @@
 
 (function() {
     function updateTotalTime() {
-        if (window.weekChartData) {
-            const sum = window.weekChartData.sum((x) => x.value);
-            document.querySelector('#week-chart .desktop-panel-heading h2').innerHTML = `Week statistics (${sum}h)`;
+        if (!window.weekChartData) {
+            return false;
         }
+        const sum = window.weekChartData.sum((x) => x.value);
+        document.querySelector('#week-chart .desktop-panel-heading h2').innerHTML = `Week statistics (${sum}h)`;
+        console.info('Week total set to', sum);
+        return true;
     }
 
-    window.setInterval(updateTotalTime, 1000);
+    function createWeekTimeChartObserver() {
+        const weekTimeChart = document.getElementById('week_time_chart');
+        const options = { childList: true };
+        const observer = new MutationObserver(() => {
+            console.log('--observer--');
+            updateTotalTime();
+        });
+
+        observer.observe(weekTimeChart, options);
+
+        return observer;
+    }
+
+    createWeekTimeChartObserver();
 })();
