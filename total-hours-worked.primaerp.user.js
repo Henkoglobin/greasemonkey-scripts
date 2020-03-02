@@ -54,10 +54,23 @@
         updateMonthTimes();
     }
 
+    function fixAnnoyingTranslations() {
+        console.log('Now fixing annoying translations...');
+        var annoyingTag = [...document.querySelectorAll('#week_time_chart svg g text')]
+            .filter(t => t.innerHTML == 'Actual week')[0];
+
+        if(annoyingTag) {
+            annoyingTag.innerHTML = 'Current week'
+        }
+    }
+
     function createWeekTimeChartObserver() {
         const weekTimeChart = document.getElementById(WEEK_TIME_CHART_ID);
         const options = { childList: true };
-        const observer = new MutationObserver(() => updateTimes());
+        const observer = new MutationObserver(() => {
+            fixAnnoyingTranslations();
+            updateTimes();
+        });
 
         observer.observe(weekTimeChart, options);
 
