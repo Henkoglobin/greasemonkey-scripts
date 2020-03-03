@@ -57,10 +57,7 @@
     function createWeekTimeChartObserver() {
         const weekTimeChart = document.getElementById(WEEK_TIME_CHART_ID);
         const options = { childList: true };
-        const observer = new MutationObserver(() => {
-            fixAnnoyingTranslations();
-            updateTimes();
-        });
+        const observer = new MutationObserver(() => updateTimes());
 
         observer.observe(weekTimeChart, options);
 
