@@ -54,16 +54,6 @@
         updateMonthTimes();
     }
 
-    function fixAnnoyingTranslations() {
-        console.log('Now fixing annoying translations...');
-        var annoyingTag = [...document.querySelectorAll('#week_time_chart svg g text')]
-            .filter(t => t.innerHTML == 'Actual week')[0];
-
-        if(annoyingTag) {
-            annoyingTag.innerHTML = 'Current week'
-        }
-    }
-
     function createWeekTimeChartObserver() {
         const weekTimeChart = document.getElementById(WEEK_TIME_CHART_ID);
         const options = { childList: true };
@@ -88,6 +78,13 @@
                 .appendTo($heading);
             $('<div>', { class: 'desktop-panel-body', id: helper.getMonthDivComparisonId(month) }).appendTo($monthDiv);
         });
+    }
+    
+    function fixCurrentWeekTranslation() {
+        const weektime = window.messages.content.dashboard.panels.weektime;
+        if(weektime.actual() == "Actual week") {
+            weektime.actual = function() { return "Current week"; };
+        }   
     }
 
     /**
@@ -190,6 +187,7 @@
 
     createWeekTimeChartObserver();
     initMonths();
+    fixCurrentWeekTranslation();
 
     function getHelper() {
         const getMonthDivId = (month) => `${MONTH_DEV_PREFIX}${month.year()}-${month.month()}`;
