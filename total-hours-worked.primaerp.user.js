@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name        primaERP - Total Hours Worked
-// @description Displays the total time worked in any week.
+// @description Displays the total time worked in any week. Also offers a slim monthly report directly in the dashboard.
 // @author      Henrik Ilgen, https://github.com/henkoglobin; Johannes Feige,https://github.com/johannesfeige
-// @version     0.0.3
+// @version     0.0.4
 // @grant       none
 // @match       https://*.primaerp.com/
 // ==/UserScript==
