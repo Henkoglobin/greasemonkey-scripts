@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name        primaERP - Total Hours Worked
-// @description Displays the total time worked in any week.
+// @description Displays the total time worked in any week. Also fixes some bad translations.
 // @author      Henrik Ilgen, https://github.com/henkoglobin; Johannes Feige,https://github.com/johannesfeige
-// @version     0.0.3
+// @version     0.0.4
 // @grant       none
 // @match       https://*.primaerp.com/
 // ==/UserScript==
@@ -75,6 +75,13 @@
                 .appendTo($heading);
             $('<div>', { class: 'desktop-panel-body', id: helper.getMonthDivComparisonId(month) }).appendTo($monthDiv);
         });
+    }
+    
+    function fixCurrentWeekTranslation() {
+        const weektime = window.messages.content.dashboard.panels.weektime;
+        if(weektime.actual() == "Actual week") {
+            weektime.actual = function() { return "Current week"; };
+        }   
     }
 
     /**
@@ -177,6 +184,7 @@
 
     createWeekTimeChartObserver();
     initMonths();
+    fixCurrentWeekTranslation();
 
     function getHelper() {
         const getMonthDivId = (month) => `${MONTH_DEV_PREFIX}${month.year()}-${month.month()}`;
