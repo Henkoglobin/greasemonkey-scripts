@@ -44,12 +44,13 @@ class AdditionalTimesService {
     _initMonths = () => {
         this._startOfMonths.forEach((month) => {
             const $parent = $(`#${this._weekChartId}`).parent();
-
             const $monthDiv = $('<div>', { class: 'desktop-panel', id: this._getMonthDivId(month) }).appendTo($parent);
             const $heading = $('<div>', { class: 'desktop-panel-heading' }).appendTo($monthDiv);
+
             $('<h2>')
                 .text(`${month.format('MMMM YYYY')}`)
                 .appendTo($heading);
+
             $('<div>', { class: 'desktop-panel-body', id: this._getMonthDivComparisonId(month) }).appendTo($monthDiv);
         });
     };
@@ -73,6 +74,7 @@ class AdditionalTimesService {
         if (!window.weekChartData) {
             return;
         }
+
         const sum = window.weekChartData.sum((x) => x.value);
         document.querySelector(this._weekStatisticsSelector).innerHTML = `Week statistics (${sum}h)`;
     };
@@ -85,8 +87,8 @@ class AdditionalTimesService {
 
     _getTimesPerMonth = (startOfMonth) => {
         const endOfMonth = moment(startOfMonth).endOf('month');
-
         const startOfWeeks = [];
+
         for (let current = startOfMonth.clone(); current <= endOfMonth; current.add(1, 'day')) {
             if (current.weekday() === 1 || !startOfWeeks.length) {
                 startOfWeeks.push(current.clone());
@@ -144,6 +146,7 @@ class AdditionalTimesService {
         }
 
         let dateCounter = 0;
+
         data.forEach((item) => {
             item.momentDate = startOfMonth.clone().add(dateCounter, 'day');
             item.targetHours = this._getDateTargetHours(item.momentDate);
@@ -179,7 +182,6 @@ class AdditionalTimesService {
         });
     };
 
-    // helper functions
     _getMonthDivId = (month) => `${this._monthDivPrefix}${month.year()}-${month.month()}`;
     _getMonthDivComparisonId = (month) => `${this._getMonthDivId(month)}-comparison`;
     _getNormalizedDayOfWeek = (momentDate) => {
