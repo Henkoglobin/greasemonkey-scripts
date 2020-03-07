@@ -8,29 +8,6 @@
 // @require     https://cdnjs.cloudflare.com/ajax/libs/rxjs/6.5.4/rxjs.umd.js
 // ==/UserScript==
 
-const WEEK_STATISTICS_SELECTOR = '#week-chart .desktop-panel-heading h2';
-const WEEK_CHART_ID = 'week-chart';
-const WEEK_TIME_CHART_ID = 'week_time_chart';
-const WEEK_REPORT_REQUEST_URL = '/reports/ajaxWeekTimeReport';
-
-const MONTH_DEV_PREFIX = 'jofeHeil-month-';
-
-const DAILY_WORK_HOURS = 8;
-const MONTH_COUNT = 2;
-const START_OF_MONTHS = (() => {
-    const result = [];
-
-    for (let index = 0; index < MONTH_COUNT; index++) {
-        result.push(
-            moment()
-                .startOf('month')
-                .subtract(index, 'months')
-        );
-    }
-
-    return result;
-})();
-
 class TranslationService {
     fixCurrentWeekTranslation() {
         const weektime = window.messages.content.dashboard.panels.weektime;
@@ -43,21 +20,21 @@ class TranslationService {
 }
 
 class AdditionalTimesService {
-    constructor() {
-        this._helper = (() => {
-            const getMonthDivId = (month) => `${MONTH_DEV_PREFIX}${month.year()}-${month.month()}`;
-            return {
-                getMonthDivId,
-                getMonthDivComparisonId: (month) => `${getMonthDivId(month)}-comparison`,
-                getNormalizedDayOfWeek: (momentDate) => {
-                    const weekday = momentDate.weekday();
-                    return weekday === 0 ? 6 : weekday - 1;
-                },
-                getDateTargetHours: (momentDate) =>
-                    momentDate.weekday() > 0 && momentDate.weekday() < 6 ? DAILY_WORK_HOURS : 0,
-            };
-        })();
-    }
+    _weekStatisticsSelector = '#week-chart .desktop-panel-heading h2';
+    _weekChartId = 'week-chart';
+    _weekTimeChartId = 'week_time_chart';
+    _weekReportRequestUrl = '/reports/ajaxWeekTimeReport';
+
+    _monthDivPrefix = 'jofeHeil-month-';
+
+    _dailyWorkHours = 8;
+    _monthCount = 2;
+
+    _startOfMonths = [...Array(this._monthCount).keys()].map((subtractValue) =>
+        moment()
+            .startOf('month')
+            .subtract(subtractValue, 'month')
+    );
 
     init() {
         this._createWeekTimeChartObserver();
@@ -65,24 +42,20 @@ class AdditionalTimesService {
     }
 
     _initMonths = () => {
-        START_OF_MONTHS.forEach((month) => {
-            const $parent = $(`#${WEEK_CHART_ID}`).parent();
+        this._startOfMonths.forEach((month) => {
+            const $parent = $(`#${this._weekChartId}`).parent();
 
-            const $monthDiv = $('<div>', { class: 'desktop-panel', id: this._helper.getMonthDivId(month) }).appendTo(
-                $parent
-            );
+            const $monthDiv = $('<div>', { class: 'desktop-panel', id: this._getMonthDivId(month) }).appendTo($parent);
             const $heading = $('<div>', { class: 'desktop-panel-heading' }).appendTo($monthDiv);
             $('<h2>')
                 .text(`${month.format('MMMM YYYY')}`)
                 .appendTo($heading);
-            $('<div>', { class: 'desktop-panel-body', id: this._helper.getMonthDivComparisonId(month) }).appendTo(
-                $monthDiv
-            );
+            $('<div>', { class: 'desktop-panel-body', id: this._getMonthDivComparisonId(month) }).appendTo($monthDiv);
         });
     };
 
     _createWeekTimeChartObserver = () => {
-        const weekTimeChart = document.getElementById(WEEK_TIME_CHART_ID);
+        const weekTimeChart = document.getElementById(this._weekTimeChartId);
         const options = { childList: true };
         const observer = new MutationObserver(this._updateTimes);
 
@@ -101,11 +74,11 @@ class AdditionalTimesService {
             return;
         }
         const sum = window.weekChartData.sum((x) => x.value);
-        document.querySelector(WEEK_STATISTICS_SELECTOR).innerHTML = `Week statistics (${sum}h)`;
+        document.querySelector(this._weekStatisticsSelector).innerHTML = `Week statistics (${sum}h)`;
     };
 
     _updateMonthTimes = () => {
-        START_OF_MONTHS.forEach((month) => {
+        this._startOfMonths.forEach((month) => {
             this._getTimesPerMonth(month).then((data) => this._updateTimesPerMonth(data, month));
         });
     };
@@ -124,7 +97,7 @@ class AdditionalTimesService {
             const startWeek = window.pe.DateFormatter.ISOFromDate(week);
             const pastWeek = window.pe.DateFormatter.ISOFromDate(week.subtract(1, 'week'));
 
-            const request = new Request(WEEK_REPORT_REQUEST_URL);
+            const request = new Request(this._weekReportRequestUrl);
 
             const data = new FormData();
             data.append('startWeek', startWeek);
@@ -158,8 +131,8 @@ class AdditionalTimesService {
      * @returns {Array} processed Data
      */
     _primaMonthPreparation = (data, startOfMonth, endOfMonth) => {
-        const startOfMonthWeekDay = this._helper.getNormalizedDayOfWeek(startOfMonth);
-        const endOfMonthWeekDay = this._helper.getNormalizedDayOfWeek(endOfMonth);
+        const startOfMonthWeekDay = this._getNormalizedDayOfWeek(startOfMonth);
+        const endOfMonthWeekDay = this._getNormalizedDayOfWeek(endOfMonth);
 
         if (startOfMonthWeekDay > 0) {
             data = data.slice(startOfMonthWeekDay, data.length);
@@ -173,7 +146,7 @@ class AdditionalTimesService {
         let dateCounter = 0;
         data.forEach((item) => {
             item.momentDate = startOfMonth.clone().add(dateCounter, 'day');
-            item.targetHours = this._helper.getDateTargetHours(item.momentDate);
+            item.targetHours = this._getDateTargetHours(item.momentDate);
             item.balance = item.value - item.targetHours;
             dateCounter++;
         });
@@ -189,7 +162,7 @@ class AdditionalTimesService {
             },
             {
                 title: 'Target',
-                value: data.filter((x) => x.day !== 'Sat' && x.day !== 'Sun').length * DAILY_WORK_HOURS,
+                value: data.filter((x) => x.day !== 'Sat' && x.day !== 'Sun').length * this._dailyWorkHours,
             },
             {
                 title: 'Balance (today)',
@@ -197,7 +170,7 @@ class AdditionalTimesService {
             },
         ];
 
-        const $comparisonDiv = $(`#${this._helper.getMonthDivComparisonId(startOfMonth)}`);
+        const $comparisonDiv = $(`#${this._getMonthDivComparisonId(startOfMonth)}`);
         $comparisonDiv.empty();
 
         times.forEach((time) => {
@@ -205,10 +178,19 @@ class AdditionalTimesService {
             $paragraph.html(`${time.title}: ${time.value}`);
         });
     };
+
+    // helper functions
+    _getMonthDivId = (month) => `${this._monthDivPrefix}${month.year()}-${month.month()}`;
+    _getMonthDivComparisonId = (month) => `${this._getMonthDivId(month)}-comparison`;
+    _getNormalizedDayOfWeek = (momentDate) => {
+        const weekday = momentDate.weekday();
+        return weekday === 0 ? 6 : weekday - 1;
+    };
+    _getDateTargetHours = (momentDate) =>
+        momentDate.weekday() > 0 && momentDate.weekday() < 6 ? this._dailyWorkHours : 0;
 }
 
 (function(translationService, timesService) {
     translationService.fixCurrentWeekTranslation();
-    timesService._createWeekTimeChartObserver();
-    timesService._initMonths();
+    timesService.init();
 })(new TranslationService(), new AdditionalTimesService());
