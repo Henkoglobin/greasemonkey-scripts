@@ -2,7 +2,7 @@
 // @name        primaERP - Total Hours Worked
 // @description Displays the total time worked in any week. Also fixes some bad translations.
 // @author      Henrik Ilgen, https://github.com/henkoglobin; Johannes Feige,https://github.com/johannesfeige
-// @version     0.0.4
+// @version     0.0.5
 // @grant       none
 // @match       https://*.primaerp.com/
 // @require     https://cdnjs.cloudflare.com/ajax/libs/rxjs/6.5.4/rxjs.umd.js
@@ -12,62 +12,98 @@ class TranslationService {
     fixCurrentWeekTranslation() {
         const weektime = window.messages.content.dashboard.panels.weektime;
         if (weektime.actual() == 'Actual week') {
-            weektime.actual = function() {
+            weektime.actual = function () {
                 return 'Current week';
             };
         }
     }
 }
 
-class AdditionalTimesService {
-    _weekStatisticsSelector = '#week-chart .desktop-panel-heading h2';
-    _weekChartId = 'week-chart';
-    _weekTimeChartId = 'week_time_chart';
-    _weekReportRequestUrl = '/reports/ajaxWeekTimeReport';
+class UiService {
+    MONTH_DIV_PREFIX = 'jofeHeil-month-';
+    WEEK_CHART_ID = 'week-chart';
+    WEEK_STATISTICS_SELECTOR = '#week-chart .desktop-panel-heading h2';
+    WEEK_TIME_CHART_ID = 'week_time_chart';
 
-    _monthDivPrefix = 'jofeHeil-month-';
+    getWeekTimeChart = () => document.getElementById(this.WEEK_TIME_CHART_ID);
+
+    updateTotalTime = (totalTime) =>
+        (document.querySelector(this.WEEK_STATISTICS_SELECTOR).innerHTML = `Week statistics (${totalTime}h)`);
+    updateTimesPerMonth = (startOfMonth, times) => {
+        const $comparisonDiv = this._getMonthComparisonDiv(startOfMonth);
+        $comparisonDiv.empty();
+
+        times.forEach((time) => {
+            const $paragraph = $('<p>').appendTo($comparisonDiv);
+            $paragraph.html(`${time.title}: ${time.value}`);
+        });
+    };
+
+    initWeekCharts = (startOfMonths) => {
+        startOfMonths.forEach((startOfMonth) => {
+            const $parent = $(`#${this.WEEK_CHART_ID}`).parent();
+            const $monthDiv = $('<div>', {
+                class: 'desktop-panel',
+                id: this._getMonthDivId(startOfMonth),
+            }).appendTo($parent);
+            const $heading = $('<div>', { class: 'desktop-panel-heading' }).appendTo($monthDiv);
+
+            $('<h2>')
+                .text(`${startOfMonth.format('MMMM YYYY')}`)
+                .appendTo($heading);
+
+            $('<div>', {
+                class: 'desktop-panel-body',
+                id: this._getMonthComparisonDivId(startOfMonth),
+            }).appendTo($monthDiv);
+        });
+    };
+
+    _getMonthDivId = (month) => `${this.MONTH_DIV_PREFIX}${month.year()}-${month.month()}`;
+    _getMonthComparisonDiv = (startOfMonth) => $(`#${this._getMonthComparisonDivId(startOfMonth)}`);
+    _getMonthComparisonDivId = (startOfMonth) => `${this._getMonthDivId(startOfMonth)}-comparison`;
+}
+
+/**
+ * @class
+ */
+class AdditionalTimesService {
+    _weekReportRequestUrl = '/reports/ajaxWeekTimeReport';
 
     _dailyWorkHours = 8;
     _monthCount = 2;
 
     _startOfMonths = [...Array(this._monthCount).keys()].map((subtractValue) =>
-        moment()
-            .startOf('month')
-            .subtract(subtractValue, 'month')
+        moment().startOf('month').subtract(subtractValue, 'month')
     );
+
+    /**
+     * @type {UiService}
+     */
+    _uiService;
+
+    constructor(uiService) {
+        this._uiService = uiService;
+    }
 
     init() {
         this._createWeekTimeChartObserver();
-        this._initMonths();
+        this._uiService.initWeekCharts(this._startOfMonths);
     }
 
-    _initMonths = () => {
-        this._startOfMonths.forEach((month) => {
-            const $parent = $(`#${this._weekChartId}`).parent();
-            const $monthDiv = $('<div>', { class: 'desktop-panel', id: this._getMonthDivId(month) }).appendTo($parent);
-            const $heading = $('<div>', { class: 'desktop-panel-heading' }).appendTo($monthDiv);
-
-            $('<h2>')
-                .text(`${month.format('MMMM YYYY')}`)
-                .appendTo($heading);
-
-            $('<div>', { class: 'desktop-panel-body', id: this._getMonthDivComparisonId(month) }).appendTo($monthDiv);
-        });
-    };
-
     _createWeekTimeChartObserver = () => {
-        const weekTimeChart = document.getElementById(this._weekTimeChartId);
+        const weekTimeChart = this._uiService.getWeekTimeChart();
         const options = { childList: true };
-        const observer = new MutationObserver(this._updateTimes);
+        const observer = new MutationObserver(this._weekTimeChartChangeHandler);
 
         observer.observe(weekTimeChart, options);
 
         return observer;
     };
 
-    _updateTimes = () => {
+    _weekTimeChartChangeHandler = () => {
         this._updateTotalTime();
-        this._updateMonthTimes();
+        this._updateMonthTimes(this._startOfMonths, this._dailyWorkHours);
     };
 
     _updateTotalTime = () => {
@@ -76,12 +112,12 @@ class AdditionalTimesService {
         }
 
         const sum = window.weekChartData.sum((x) => x.value);
-        document.querySelector(this._weekStatisticsSelector).innerHTML = `Week statistics (${sum}h)`;
+        this._uiService.updateTotalTime(sum);
     };
 
-    _updateMonthTimes = () => {
-        this._startOfMonths.forEach((month) => {
-            this._getTimesPerMonth(month).then((data) => this._updateTimesPerMonth(data, month));
+    _updateMonthTimes = (months, dailyWorkHours) => {
+        months.forEach((month) => {
+            this._getTimesPerMonth(month).then((data) => this._updateTimesPerMonth(data, dailyWorkHours));
         });
     };
 
@@ -157,7 +193,9 @@ class AdditionalTimesService {
         return data;
     };
 
-    _updateTimesPerMonth = (data, startOfMonth) => {
+    _updateTimesPerMonth = (data, dailyWorkHours) => {
+        const [startOfMonth] = data;
+
         const times = [
             {
                 title: 'Actual',
@@ -165,7 +203,7 @@ class AdditionalTimesService {
             },
             {
                 title: 'Target',
-                value: data.filter((x) => x.day !== 'Sat' && x.day !== 'Sun').length * this._dailyWorkHours,
+                value: data.filter((x) => x.day !== 'Sat' && x.day !== 'Sun').length * dailyWorkHours,
             },
             {
                 title: 'Balance (today)',
@@ -173,17 +211,9 @@ class AdditionalTimesService {
             },
         ];
 
-        const $comparisonDiv = $(`#${this._getMonthDivComparisonId(startOfMonth)}`);
-        $comparisonDiv.empty();
-
-        times.forEach((time) => {
-            const $paragraph = $('<p>').appendTo($comparisonDiv);
-            $paragraph.html(`${time.title}: ${time.value}`);
-        });
+        this._uiService.updateTimesPerMonth(startOfMonth.momentDate, times);
     };
 
-    _getMonthDivId = (month) => `${this._monthDivPrefix}${month.year()}-${month.month()}`;
-    _getMonthDivComparisonId = (month) => `${this._getMonthDivId(month)}-comparison`;
     _getNormalizedDayOfWeek = (momentDate) => {
         const weekday = momentDate.weekday();
         return weekday === 0 ? 6 : weekday - 1;
@@ -192,7 +222,7 @@ class AdditionalTimesService {
         momentDate.weekday() > 0 && momentDate.weekday() < 6 ? this._dailyWorkHours : 0;
 }
 
-(function(translationService, timesService) {
+(function (translationService, timesService) {
     translationService.fixCurrentWeekTranslation();
     timesService.init();
-})(new TranslationService(), new AdditionalTimesService());
+})(new TranslationService(), new AdditionalTimesService(new UiService()));
