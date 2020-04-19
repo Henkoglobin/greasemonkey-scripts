@@ -9,7 +9,7 @@
 // ==/UserScript==
 
 window.Rx = rxjs;
-const { map, tap, flatMap } = rxjs.operators;
+const { distinct, map, tap, flatMap } = rxjs.operators;
 
 class TranslationService {
     fixCurrentWeekTranslation() {
@@ -121,10 +121,14 @@ class AdditionalTimesService {
 
         Rx.combineLatest(this._startOfMonths$, this._dailyWorkHours$, this._weekTimes$)
             .pipe(
-                flatMap(([startOfMonths, dailyWorkHours, _]) =>
-                    startOfMonths.map((startOfMonth) => this._getTimesPerMonth(startOfMonth, dailyWorkHours))
+                flatMap(([startOfMonths, dailyWorkHours, weekTimes]) =>
+                    Rx.iif(
+                        () => weekTimes && weekTimes.length,
+                        startOfMonths.map((startOfMonth) => this._getTimesPerMonth(startOfMonth, dailyWorkHours))
+                    )
                 ),
                 flatMap((data) => data),
+                tap((data) => console.log(data)),
                 tap((data) => this._updateTimesPerMonth(data))
             )
             .subscribe();
@@ -141,7 +145,9 @@ class AdditionalTimesService {
     };
 
     _weekTimeChartChangeHandler = () => {
-        this._weekTimes$.next(window.weekChartData);
+        if (this._weekTimes$.value !== window.weekChartData) {
+            this._weekTimes$.next(window.weekChartData);
+        }
     };
 
     _updateTotalTime = (weekTimes) => {
