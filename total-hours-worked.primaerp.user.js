@@ -195,7 +195,8 @@ class AdditionalTimesService {
         return Rx.forkJoin(requests.map((x) => fetch(x.request, x.init))).pipe(
             flatMap((responses) => Rx.forkJoin(responses.map((response) => response.json()))),
             map((data) => data.flat(1)),
-            map((data) => this._enrichPrimaTimes(data, startOfMonth, endOfMonth, dailyWorkHours))
+            map((data) => this._enrichPrimaTimes(data, startOfMonth, endOfMonth)),
+            map((data) => this._enrichTargetHours(data, dailyWorkHours))
         );
     };
 
@@ -208,7 +209,7 @@ class AdditionalTimesService {
      * @param {Date} endOfMonth
      * @returns {Array} processed Data
      */
-    _enrichPrimaTimes = (data, startOfMonth, endOfMonth, dailyWorkHours) => {
+    _enrichPrimaTimes = (data, startOfMonth, endOfMonth) => {
         console.log('primaMonthPrep', data, startOfMonth, endOfMonth);
         const startOfMonthWeekDay = this._getNormalizedDayOfWeek(startOfMonth);
         const endOfMonthWeekDay = this._getNormalizedDayOfWeek(endOfMonth);
@@ -222,14 +223,19 @@ class AdditionalTimesService {
             data.splice(-carryover, carryover);
         }
 
-        data.forEach((item, index) => {
-            item.momentDate = startOfMonth.clone().add(index, 'day');
+        return data.map((item, index) => ({
+            ...item,
+            momentDate: startOfMonth.clone().add(index, 'day'),
+        }));
+    };
+
+    _enrichTargetHours = (data, dailyWorkHours) =>
+        data.map((item) => {
             item.targetHours = this._getDateTargetHours(item.momentDate, dailyWorkHours);
             item.balance = item.value - item.targetHours;
-        });
 
-        return data;
-    };
+            return item;
+        });
 
     _updateTimesPerMonth = (data) => {
         const [startOfMonth] = data;
