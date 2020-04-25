@@ -9,7 +9,7 @@
 // ==/UserScript==
 
 window.Rx = rxjs;
-const { distinct, map, tap, flatMap } = rxjs.operators;
+const { distinct, map, tap, flatMap, mergeAll } = rxjs.operators;
 
 class TranslationService {
     fixCurrentWeekTranslation() {
@@ -88,6 +88,7 @@ class AdditionalTimesService {
 
         this._dailyWorkHours$ = new Rx.BehaviorSubject(8);
         this._monthCount$ = new Rx.BehaviorSubject(2);
+
         this._weekTimes$ = new Rx.BehaviorSubject([]);
         this._monthTimes$ = new Rx.BehaviorSubject([]);
 
@@ -127,8 +128,8 @@ class AdditionalTimesService {
                         startOfMonths.map((startOfMonth) => this._getTimesPerMonth(startOfMonth, dailyWorkHours))
                     )
                 ),
-                flatMap((data) => data),
-                tap((data) => console.log(data)),
+                mergeAll(),
+                tap(console.log),
                 tap((data) => this._updateTimesPerMonth(data))
             )
             .subscribe();
@@ -194,20 +195,21 @@ class AdditionalTimesService {
         return Rx.forkJoin(requests.map((x) => fetch(x.request, x.init))).pipe(
             flatMap((responses) => Rx.forkJoin(responses.map((response) => response.json()))),
             map((data) => data.flat(1)),
-            map((data) => this._primaMonthPreparation(data, startOfMonth, endOfMonth, dailyWorkHours))
+            map((data) => this._enrichPrimaTimes(data, startOfMonth, endOfMonth, dailyWorkHours))
         );
     };
 
     /**
      * Preparation of months because ajayWeekTimeReport return whole week
      * (also including Days of previous or following months)
-     * Also enchric target per day and moment date
+     * Also enriching moment date
      * @param {Array} data
      * @param {Date} startOfMonth
      * @param {Date} endOfMonth
      * @returns {Array} processed Data
      */
-    _primaMonthPreparation = (data, startOfMonth, endOfMonth, dailyWorkHours) => {
+    _enrichPrimaTimes = (data, startOfMonth, endOfMonth, dailyWorkHours) => {
+        console.log('primaMonthPrep', data, startOfMonth, endOfMonth);
         const startOfMonthWeekDay = this._getNormalizedDayOfWeek(startOfMonth);
         const endOfMonthWeekDay = this._getNormalizedDayOfWeek(endOfMonth);
 
@@ -220,13 +222,10 @@ class AdditionalTimesService {
             data.splice(-carryover, carryover);
         }
 
-        let dateCounter = 0;
-
-        data.forEach((item) => {
-            item.momentDate = startOfMonth.clone().add(dateCounter, 'day');
+        data.forEach((item, index) => {
+            item.momentDate = startOfMonth.clone().add(index, 'day');
             item.targetHours = this._getDateTargetHours(item.momentDate, dailyWorkHours);
             item.balance = item.value - item.targetHours;
-            dateCounter++;
         });
 
         return data;
