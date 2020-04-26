@@ -9,7 +9,7 @@
 // ==/UserScript==
 
 window.Rx = rxjs;
-const { distinct, map, tap, flatMap, mergeAll } = rxjs.operators;
+const { distinctUntilChanged, map, tap, flatMap, mergeAll } = rxjs.operators;
 
 class TranslationService {
     fixCurrentWeekTranslation() {
@@ -69,6 +69,36 @@ class UiService {
     _getMonthComparisonDivId = (startOfMonth) => `${this._getMonthDivId(startOfMonth)}-comparison`;
 }
 
+class SettingsService {
+    settings$ = new Rx.BehaviorSubject({
+        dailyWorkHours: 8,
+        monthCount: 2,
+    });
+
+    /**
+     * @type {UiService}
+     */
+    _uiService;
+
+    constructor(uiService) {
+        this._uiService = uiService;
+    }
+
+    setDailyWorkHours(value) {
+        this.settings$.next({
+            ...this.settings$.value,
+            dailyWorkHours: value,
+        });
+    }
+
+    setMonthCount(value) {
+        this.settings$.next({
+            ...this.settings$.value,
+            monthCount: value,
+        });
+    }
+}
+
 class AdditionalTimesService {
     _weekReportRequestUrl = '/reports/ajaxWeekTimeReport';
 
@@ -83,11 +113,23 @@ class AdditionalTimesService {
      */
     _uiService;
 
-    constructor(uiService) {
-        this._uiService = uiService;
+    /**
+     * @type {SettingsService}
+     */
+    _settingsService;
 
-        this._dailyWorkHours$ = new Rx.BehaviorSubject(8);
-        this._monthCount$ = new Rx.BehaviorSubject(2);
+    constructor(uiService, settingsService) {
+        this._uiService = uiService;
+        this._settingsService = settingsService;
+
+        this._dailyWorkHours$ = this._settingsService.settings$.pipe(
+            map((settings) => settings.dailyWorkHours),
+            distinctUntilChanged()
+        );
+        this._monthCount$ = this._settingsService.settings$.pipe(
+            map((settings) => settings.monthCount),
+            distinctUntilChanged()
+        );
 
         this._weekTimes$ = new Rx.BehaviorSubject([]);
         this._monthTimes$ = new Rx.BehaviorSubject([]);
@@ -97,14 +139,6 @@ class AdditionalTimesService {
                 return [...Array(monthCount).keys()].map((index) => moment().startOf('month').subtract(index, 'month'));
             })
         );
-
-        window.updateDailyWorkHours = (value) => {
-            this._dailyWorkHours$.next(value);
-        };
-
-        window.updateMonthCount = (value) => {
-            this._monthCount$.next(value);
-        };
     }
 
     init() {
@@ -131,7 +165,7 @@ class AdditionalTimesService {
                         map((data) => this._enrichTargetHours(data, dailyWorkHours))
                     )
                 ),
-                tap(console.log),
+                tap((data) => console.log('after enriching - ', { data })),
                 tap((data) => this._updateTimesPerMonth(data))
             )
             .subscribe();
@@ -211,7 +245,7 @@ class AdditionalTimesService {
      * @returns {Array} processed Data
      */
     _enrichPrimaTimes = (data, startOfMonth, endOfMonth) => {
-        console.log('primaMonthPrep', data, startOfMonth, endOfMonth);
+        console.log('primaMonthPrep -', 'data count:', data.length);
         const startOfMonthWeekDay = this._getNormalizedDayOfWeek(startOfMonth);
         const endOfMonthWeekDay = this._getNormalizedDayOfWeek(endOfMonth);
 
@@ -267,7 +301,15 @@ class AdditionalTimesService {
         momentDate.weekday() > 0 && momentDate.weekday() < 6 ? dailyWorkHours : 0;
 }
 
+const translationService = new TranslationService();
+const uiService = new UiService();
+const settingsService = new SettingsService(uiService);
+const additionalTimesService = new AdditionalTimesService(uiService, settingsService);
+
+window.setDailyWorkHours = settingsService.setDailyWorkHours.bind(settingsService);
+window.setMonthCount = settingsService.setMonthCount.bind(settingsService);
+
 (function (translationService, timesService) {
     translationService.fixCurrentWeekTranslation();
     timesService.init();
-})(new TranslationService(), new AdditionalTimesService(new UiService()));
+})(translationService, additionalTimesService);
