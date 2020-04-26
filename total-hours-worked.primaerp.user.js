@@ -65,7 +65,7 @@ class UiService {
         });
     };
 
-    appendAdditionalSettingsMenu() {
+    appendAdditionalSettingsMenu(getDialogOptions) {
         const $insertBefore = $(this.ADDITIONAL_SETTINGS_INSERT_SELECTOR);
         if ($insertBefore.length !== 1) {
             console.error(`Cannot find element for inserting additional settings`, { $accountMenu: $insertBefore });
@@ -76,17 +76,14 @@ class UiService {
             href: '#',
             text: 'Additional Settings',
         }).on('click', () => {
-            this.openDialog();
+            this.openDialog(getDialogOptions);
         });
         const $additionalSettings = $('<li>').append($link);
         $additionalSettings.insertBefore($insertBefore);
     }
 
-    openDialog() {
-        const elements = [
-            { id: 'dailyWorkHours', label: 'Daily Work Hours', value: 8 },
-            { id: 'monthCount', label: 'Month Count', value: 2 },
-        ];
+    openDialog(getDialogOptions) {
+        const { elements, submit } = getDialogOptions();
 
         const $backdrop = this._openBackdrop();
 
@@ -112,7 +109,7 @@ class UiService {
         })
             .on('submit', (event) => {
                 event.preventDefault();
-                this._submitDialog($modalWrapper, $backdrop);
+                this._submitDialog($modalWrapper, $backdrop, submit);
             })
             .appendTo($dialog);
 
@@ -142,14 +139,6 @@ class UiService {
         const $dialogBody = $('<div>', {
             class: 'modal-body',
         }).appendTo($form);
-
-        // const $row = $('<div>', {
-        //     class: 'row',
-        // }).appendTo($dialogBody);
-
-        // const $col = $('<div>', {
-        //     class: 'col-md-5',
-        // }).appendTo($row);
 
         elements.forEach((element) => {
             const $formGroup = $('<div>', {
@@ -203,8 +192,17 @@ class UiService {
         $('body').removeClass('modal-open modal-with-am-fade-an-slide-top');
     }
 
-    _submitDialog($modalWrapper, $backdrop) {
+    _submitDialog($modalWrapper, $backdrop, callback) {
         console.log('submit');
+
+        const result = {};
+
+        $modalWrapper.find('.form-group input').each(function () {
+            const element = $(this);
+            result[element.attr('id')] = element.val();
+        });
+
+        callback(result);
 
         this._closeDialog($modalWrapper, $backdrop);
     }
@@ -259,8 +257,24 @@ class SettingsService {
     }
 
     init() {
-        this._uiService.appendAdditionalSettingsMenu();
+        this._uiService.appendAdditionalSettingsMenu(this.getSettingsDialogOptions);
     }
+
+    getSettingsDialogOptions = () => ({
+        elements: [
+            { id: 'dailyWorkHours', label: 'Daily Work Hours', value: this.settings$.value.dailyWorkHours },
+            { id: 'monthCount', label: 'Month Count', value: this.settings$.value.monthCount },
+        ],
+        submit: (result) => {
+            const dailyWorkHours = Number.parseInt(result.dailyWorkHours);
+            const monthCount = Number.parseInt(result.monthCount);
+            this.settings$.next({
+                ...this.settings$.value,
+                dailyWorkHours,
+                monthCount,
+            });
+        },
+    });
 }
 
 class AdditionalTimesService {
@@ -318,9 +332,9 @@ class AdditionalTimesService {
             )
             .subscribe();
 
-        Rx.combineLatest(this._startOfMonths$, this._dailyWorkHours$, this._weekTimes$)
+        Rx.combineLatest(this._dailyWorkHours$, this._startOfMonths$, this._weekTimes$)
             .pipe(
-                flatMap(([startOfMonths, dailyWorkHours, weekTimes]) =>
+                flatMap(([dailyWorkHours, startOfMonths, weekTimes]) =>
                     Rx.iif(
                         () => weekTimes && weekTimes.length,
                         startOfMonths.map((startOfMonth) => this._getTimesPerMonth(startOfMonth))
