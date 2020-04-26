@@ -23,6 +23,7 @@ class TranslationService {
 }
 
 class UiService {
+    ADDITIONAL_SETTINGS_INSERT_SELECTOR = '.account > ul > li.divider:first';
     MONTH_DIV_PREFIX = 'jofeHeil-month-';
     WEEK_CHART_ID = 'week-chart';
     WEEK_STATISTICS_SELECTOR = '#week-chart .desktop-panel-heading h2';
@@ -64,6 +65,163 @@ class UiService {
         });
     };
 
+    appendAdditionalSettingsMenu() {
+        const $insertBefore = $(this.ADDITIONAL_SETTINGS_INSERT_SELECTOR);
+        if ($insertBefore.length !== 1) {
+            console.error(`Cannot find element for inserting additional settings`, { $accountMenu: $insertBefore });
+            return;
+        }
+
+        const $link = $('<a>', {
+            href: '#',
+            text: 'Additional Settings',
+        }).on('click', () => {
+            this.openDialog();
+        });
+        const $additionalSettings = $('<li>').append($link);
+        $additionalSettings.insertBefore($insertBefore);
+    }
+
+    openDialog() {
+        const elements = [
+            { id: 'dailyWorkHours', label: 'Daily Work Hours', value: 8 },
+            { id: 'monthCount', label: 'Month Count', value: 2 },
+        ];
+
+        const $backdrop = this._openBackdrop();
+
+        const $body = $('body');
+
+        const $modalWrapper = $('<div>', {
+            class: 'modal',
+            style: 'display: block;',
+        }).appendTo($body);
+
+        const closeDialog = this._closeDialog.bind(this, $modalWrapper, $backdrop);
+
+        const $dialogWrapper = $('<div>', {
+            class: 'modal-dialog',
+        }).appendTo($modalWrapper);
+
+        const $dialog = $('<div>', {
+            class: 'modal-content',
+        }).appendTo($dialogWrapper);
+
+        const $form = $('<form>', {
+            class: 'form-horizontal',
+        })
+            .on('submit', (event) => {
+                event.preventDefault();
+                this._submitDialog($modalWrapper, $backdrop);
+            })
+            .appendTo($dialog);
+
+        const $dialogHeader = $('<div>', {
+            class: 'modal-header ui-draggable-handle',
+        }).appendTo($form);
+
+        const $dialogHeaderClose = $('<button>', {
+            type: 'button',
+            class: 'close',
+        })
+            .on('click', () => {
+                closeDialog();
+            })
+            .appendTo($dialogHeader)
+            .append(
+                $('<span>', {
+                    text: 'x',
+                })
+            );
+
+        const $headerTitle = $('<h4>', {
+            class: 'modal-title title',
+            text: 'Additional Settings',
+        }).appendTo($dialogHeader);
+
+        const $dialogBody = $('<div>', {
+            class: 'modal-body',
+        }).appendTo($form);
+
+        // const $row = $('<div>', {
+        //     class: 'row',
+        // }).appendTo($dialogBody);
+
+        // const $col = $('<div>', {
+        //     class: 'col-md-5',
+        // }).appendTo($row);
+
+        elements.forEach((element) => {
+            const $formGroup = $('<div>', {
+                class: 'form-group',
+                size: '2',
+            }).appendTo($dialogBody);
+
+            const $label = $('<label>', {
+                for: element.id,
+                class: 'col-sm-2 control-label',
+                text: element.label,
+            }).appendTo($formGroup);
+
+            const $inputWrapper = $('<div>', {
+                class: 'col-sm-10',
+            }).appendTo($formGroup);
+
+            const $input = $('<input>', {
+                class: 'form-control',
+                name: element.id,
+                id: element.id,
+                value: element.value,
+            }).appendTo($inputWrapper);
+        });
+
+        const $dialogFooter = $('<div>', {
+            class: 'modal-footer',
+        }).appendTo($form);
+
+        const $close = $('<button>', {
+            type: 'button',
+            class: 'btn btn-link',
+            text: 'Close',
+        })
+            .on('click', () => {
+                closeDialog();
+            })
+            .appendTo($dialogFooter);
+
+        const $save = $('<button>', {
+            type: 'submit',
+            class: 'btn btn-primary',
+            text: 'Save',
+        }).appendTo($dialogFooter);
+    }
+
+    _closeDialog($modalWrapper, $backdrop) {
+        $modalWrapper.remove();
+        $backdrop.remove();
+
+        $('body').removeClass('modal-open modal-with-am-fade-an-slide-top');
+    }
+
+    _submitDialog($modalWrapper, $backdrop) {
+        console.log('submit');
+
+        this._closeDialog($modalWrapper, $backdrop);
+    }
+
+    _openBackdrop() {
+        const $body = $('body');
+        $body.addClass('modal-open modal-with-am-fade-an-slide-top');
+
+        const $backdrop = $('<div>', {
+            class: 'modal-backdrop am-fade',
+            style: 'position: fixed; top: 0px; left: 0px; bottom: 0px; right: 0px; z-index: 1038;',
+        });
+        $body.prepend($backdrop);
+
+        return $backdrop;
+    }
+
     _getMonthDivId = (month) => `${this.MONTH_DIV_PREFIX}${month.year()}-${month.month()}`;
     _getMonthComparisonDiv = (startOfMonth) => $(`#${this._getMonthComparisonDivId(startOfMonth)}`);
     _getMonthComparisonDivId = (startOfMonth) => `${this._getMonthDivId(startOfMonth)}-comparison`;
@@ -82,6 +240,8 @@ class SettingsService {
 
     constructor(uiService) {
         this._uiService = uiService;
+
+        this.init();
     }
 
     setDailyWorkHours(value) {
@@ -96,6 +256,10 @@ class SettingsService {
             ...this.settings$.value,
             monthCount: value,
         });
+    }
+
+    init() {
+        this._uiService.appendAdditionalSettingsMenu();
     }
 }
 
