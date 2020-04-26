@@ -125,10 +125,12 @@ class AdditionalTimesService {
                 flatMap(([startOfMonths, dailyWorkHours, weekTimes]) =>
                     Rx.iif(
                         () => weekTimes && weekTimes.length,
-                        startOfMonths.map((startOfMonth) => this._getTimesPerMonth(startOfMonth, dailyWorkHours))
+                        startOfMonths.map((startOfMonth) => this._getTimesPerMonth(startOfMonth))
+                    ).pipe(
+                        mergeAll(),
+                        map((data) => this._enrichTargetHours(data, dailyWorkHours))
                     )
                 ),
-                mergeAll(),
                 tap(console.log),
                 tap((data) => this._updateTimesPerMonth(data))
             )
@@ -160,7 +162,7 @@ class AdditionalTimesService {
         this._uiService.updateTotalTime(sum);
     };
 
-    _getTimesPerMonth = (startOfMonth, dailyWorkHours) => {
+    _getTimesPerMonth = (startOfMonth) => {
         const endOfMonth = moment(startOfMonth).endOf('month');
         const startOfWeeks = [];
 
@@ -195,8 +197,7 @@ class AdditionalTimesService {
         return Rx.forkJoin(requests.map((x) => fetch(x.request, x.init))).pipe(
             flatMap((responses) => Rx.forkJoin(responses.map((response) => response.json()))),
             map((data) => data.flat(1)),
-            map((data) => this._enrichPrimaTimes(data, startOfMonth, endOfMonth)),
-            map((data) => this._enrichTargetHours(data, dailyWorkHours))
+            map((data) => this._enrichPrimaTimes(data, startOfMonth, endOfMonth))
         );
     };
 
