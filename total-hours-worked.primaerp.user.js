@@ -2,125 +2,129 @@
 // @name        primaERP - Total Hours Worked
 // @description Displays the total time worked in any week. Also fixes some bad translations.
 // @author      Henrik Ilgen, https://github.com/henkoglobin; Johannes Feige,https://github.com/johannesfeige
-// @version     0.0.4
+// @version     0.0.5
 // @grant       none
 // @match       https://*.primaerp.com/
+// @require     https://cdnjs.cloudflare.com/ajax/libs/rxjs/6.5.4/rxjs.umd.js
 // ==/UserScript==
 
-(function() {
-    const WEEK_STATISTICS_SELECTOR = '#week-chart .desktop-panel-heading h2';
-    const WEEK_CHART_ID = 'week-chart';
-    const WEEK_TIME_CHART_ID = 'week_time_chart';
-    const WEEK_REPORT_REQUEST_URL = '/reports/ajaxWeekTimeReport';
-
-    const MONTH_DEV_PREFIX = 'jofeHeil-month-';
-
-    const DAILY_WORK_HOURS = 8;
-    const MONTH_COUNT = 2;
-    const START_OF_MONTHS = (() => {
-        const result = [];
-
-        for (let index = 0; index < MONTH_COUNT; index++) {
-            result.push(
-                moment()
-                    .startOf('month')
-                    .subtract(index, 'months')
-            );
+class TranslationService {
+    fixCurrentWeekTranslation() {
+        const weektime = window.messages.content.dashboard.panels.weektime;
+        if (weektime.actual() == 'Actual week') {
+            weektime.actual = function () {
+                return 'Current week';
+            };
         }
-
-        return result;
-    })();
-
-    const helper = getHelper();
-
-    function updateTotalTime() {
-        if (!window.weekChartData) {
-            return false;
-        }
-        const sum = window.weekChartData.sum((x) => x.value);
-        document.querySelector(WEEK_STATISTICS_SELECTOR).innerHTML = `Week statistics (${sum}h)`;
-
-        return true;
     }
+}
 
-    function updateMonthTimes() {
-        START_OF_MONTHS.forEach((month) => {
-            getTimesPerMonth(month).then((data) => updateTimesPerMonth(data, month));
+class UiService {
+    MONTH_DIV_PREFIX = 'jofeHeil-month-';
+    WEEK_CHART_ID = 'week-chart';
+    WEEK_STATISTICS_SELECTOR = '#week-chart .desktop-panel-heading h2';
+    WEEK_TIME_CHART_ID = 'week_time_chart';
+
+    getWeekTimeChart = () => document.getElementById(this.WEEK_TIME_CHART_ID);
+
+    updateTotalTime = (totalTime) =>
+        (document.querySelector(this.WEEK_STATISTICS_SELECTOR).innerHTML = `Week statistics (${totalTime}h)`);
+    updateTimesPerMonth = (startOfMonth, times) => {
+        const $comparisonDiv = this._getMonthComparisonDiv(startOfMonth);
+        $comparisonDiv.empty();
+
+        times.forEach((time) => {
+            const $paragraph = $('<p>').appendTo($comparisonDiv);
+            $paragraph.html(`${time.title}: ${time.value}`);
         });
+    };
+
+    initWeekCharts = (startOfMonths) => {
+        startOfMonths.forEach((startOfMonth) => {
+            const $parent = $(`#${this.WEEK_CHART_ID}`).parent();
+            const $monthDiv = $('<div>', {
+                class: 'desktop-panel',
+                id: this._getMonthDivId(startOfMonth),
+            }).appendTo($parent);
+            const $heading = $('<div>', { class: 'desktop-panel-heading' }).appendTo($monthDiv);
+
+            $('<h2>')
+                .text(`${startOfMonth.format('MMMM YYYY')}`)
+                .appendTo($heading);
+
+            $('<div>', {
+                class: 'desktop-panel-body',
+                id: this._getMonthComparisonDivId(startOfMonth),
+            }).appendTo($monthDiv);
+        });
+    };
+
+    _getMonthDivId = (month) => `${this.MONTH_DIV_PREFIX}${month.year()}-${month.month()}`;
+    _getMonthComparisonDiv = (startOfMonth) => $(`#${this._getMonthComparisonDivId(startOfMonth)}`);
+    _getMonthComparisonDivId = (startOfMonth) => `${this._getMonthDivId(startOfMonth)}-comparison`;
+}
+
+/**
+ * @class
+ */
+class AdditionalTimesService {
+    _weekReportRequestUrl = '/reports/ajaxWeekTimeReport';
+
+    _dailyWorkHours = 8;
+    _monthCount = 2;
+
+    _startOfMonths = [...Array(this._monthCount).keys()].map((subtractValue) =>
+        moment().startOf('month').subtract(subtractValue, 'month')
+    );
+
+    /**
+     * @type {UiService}
+     */
+    _uiService;
+
+    constructor(uiService) {
+        this._uiService = uiService;
     }
 
-    function updateTimes() {
-        updateTotalTime();
-        updateMonthTimes();
+    init() {
+        this._createWeekTimeChartObserver();
+        this._uiService.initWeekCharts(this._startOfMonths);
     }
 
-    function createWeekTimeChartObserver() {
-        const weekTimeChart = document.getElementById(WEEK_TIME_CHART_ID);
+    _createWeekTimeChartObserver = () => {
+        const weekTimeChart = this._uiService.getWeekTimeChart();
         const options = { childList: true };
-        const observer = new MutationObserver(() => updateTimes());
+        const observer = new MutationObserver(this._weekTimeChartChangeHandler);
 
         observer.observe(weekTimeChart, options);
 
         return observer;
-    }
+    };
 
-    function initMonths() {
-        START_OF_MONTHS.forEach((month) => {
-            const $parent = $(`#${WEEK_CHART_ID}`).parent();
+    _weekTimeChartChangeHandler = () => {
+        this._updateTotalTime();
+        this._updateMonthTimes(this._startOfMonths, this._dailyWorkHours);
+    };
 
-            const $monthDiv = $('<div>', { class: 'desktop-panel', id: helper.getMonthDivId(month) }).appendTo($parent);
-            const $heading = $('<div>', { class: 'desktop-panel-heading' }).appendTo($monthDiv);
-            $('<h2>')
-                .text(`${month.format('MMMM YYYY')}`)
-                .appendTo($heading);
-            $('<div>', { class: 'desktop-panel-body', id: helper.getMonthDivComparisonId(month) }).appendTo($monthDiv);
-        });
-    }
-    
-    function fixCurrentWeekTranslation() {
-        const weektime = window.messages.content.dashboard.panels.weektime;
-        if(weektime.actual() == "Actual week") {
-            weektime.actual = function() { return "Current week"; };
-        }   
-    }
-
-    /**
-     * Preparation of months because ajayWeekTimeReport return whole week
-     * (also including Days of previous or following months)
-     * Also enchric target per day and moment date
-     * @param {Array} data
-     * @param {Date} startOfMonth
-     * @param {Date} endOfMonth
-     * @returns {Array} processed Data
-     */
-    function primaMonthPreparation(data, startOfMonth, endOfMonth) {
-        const startOfMonthWeekDay = helper.getNormalizedDayOfWeek(startOfMonth);
-        const endOfMonthWeekDay = helper.getNormalizedDayOfWeek(endOfMonth);
-
-        if (startOfMonthWeekDay > 0) {
-            data = data.slice(startOfMonthWeekDay, data.length);
+    _updateTotalTime = () => {
+        if (!window.weekChartData) {
+            return;
         }
 
-        if (endOfMonthWeekDay < 6) {
-            const carryover = 6 - endOfMonthWeekDay;
-            data.splice(-carryover, carryover);
-        }
+        const sum = window.weekChartData.sum((x) => x.value);
+        this._uiService.updateTotalTime(sum);
+    };
 
-        let dateCounter = 0;
-        data.forEach((item) => {
-            item.momentDate = startOfMonth.clone().add(dateCounter, 'day');
-            item.targetHours = helper.getDateTargetHours(item.momentDate);
-            item.balance = item.value - item.targetHours;
-            dateCounter++;
+    _updateMonthTimes = (months, dailyWorkHours) => {
+        months.forEach((month) => {
+            this._getTimesPerMonth(month).then((data) => this._updateTimesPerMonth(data, dailyWorkHours));
         });
+    };
 
-        return data;
-    }
-
-    function getTimesPerMonth(startOfMonth) {
+    _getTimesPerMonth = (startOfMonth) => {
         const endOfMonth = moment(startOfMonth).endOf('month');
-
         const startOfWeeks = [];
+
         for (let current = startOfMonth.clone(); current <= endOfMonth; current.add(1, 'day')) {
             if (current.weekday() === 1 || !startOfWeeks.length) {
                 startOfWeeks.push(current.clone());
@@ -131,7 +135,7 @@
             const startWeek = window.pe.DateFormatter.ISOFromDate(week);
             const pastWeek = window.pe.DateFormatter.ISOFromDate(week.subtract(1, 'week'));
 
-            const request = new Request(WEEK_REPORT_REQUEST_URL);
+            const request = new Request(this._weekReportRequestUrl);
 
             const data = new FormData();
             data.append('startWeek', startWeek);
@@ -152,10 +156,46 @@
         return Promise.all(requests.map((x) => fetch(x.request, x.init)))
             .then((responses) => Promise.all(responses.map((response) => response.json())))
             .then((data) => data.flat(1))
-            .then((data) => primaMonthPreparation(data, startOfMonth, endOfMonth));
-    }
+            .then((data) => this._primaMonthPreparation(data, startOfMonth, endOfMonth));
+    };
 
-    function updateTimesPerMonth(data, startOfMonth) {
+    /**
+     * Preparation of months because ajayWeekTimeReport return whole week
+     * (also including Days of previous or following months)
+     * Also enchric target per day and moment date
+     * @param {Array} data
+     * @param {Date} startOfMonth
+     * @param {Date} endOfMonth
+     * @returns {Array} processed Data
+     */
+    _primaMonthPreparation = (data, startOfMonth, endOfMonth) => {
+        const startOfMonthWeekDay = this._getNormalizedDayOfWeek(startOfMonth);
+        const endOfMonthWeekDay = this._getNormalizedDayOfWeek(endOfMonth);
+
+        if (startOfMonthWeekDay > 0) {
+            data = data.slice(startOfMonthWeekDay, data.length);
+        }
+
+        if (endOfMonthWeekDay < 6) {
+            const carryover = 6 - endOfMonthWeekDay;
+            data.splice(-carryover, carryover);
+        }
+
+        let dateCounter = 0;
+
+        data.forEach((item) => {
+            item.momentDate = startOfMonth.clone().add(dateCounter, 'day');
+            item.targetHours = this._getDateTargetHours(item.momentDate);
+            item.balance = item.value - item.targetHours;
+            dateCounter++;
+        });
+
+        return data;
+    };
+
+    _updateTimesPerMonth = (data, dailyWorkHours) => {
+        const [startOfMonth] = data;
+
         const times = [
             {
                 title: 'Actual',
@@ -163,7 +203,7 @@
             },
             {
                 title: 'Target',
-                value: data.filter((x) => x.day !== 'Sat' && x.day !== 'Sun').length * DAILY_WORK_HOURS,
+                value: data.filter((x) => x.day !== 'Sat' && x.day !== 'Sun').length * dailyWorkHours,
             },
             {
                 title: 'Balance (today)',
@@ -171,32 +211,18 @@
             },
         ];
 
-        console.log({ data });
+        this._uiService.updateTimesPerMonth(startOfMonth.momentDate, times);
+    };
 
-        const $comparisonDiv = $(`#${helper.getMonthDivComparisonId(startOfMonth)}`);
-        $comparisonDiv.empty();
+    _getNormalizedDayOfWeek = (momentDate) => {
+        const weekday = momentDate.weekday();
+        return weekday === 0 ? 6 : weekday - 1;
+    };
+    _getDateTargetHours = (momentDate) =>
+        momentDate.weekday() > 0 && momentDate.weekday() < 6 ? this._dailyWorkHours : 0;
+}
 
-        times.forEach((time) => {
-            const $paragraph = $('<p>').appendTo($comparisonDiv);
-            $paragraph.html(`${time.title}: ${time.value}`);
-        });
-    }
-
-    createWeekTimeChartObserver();
-    initMonths();
-    fixCurrentWeekTranslation();
-
-    function getHelper() {
-        const getMonthDivId = (month) => `${MONTH_DEV_PREFIX}${month.year()}-${month.month()}`;
-        return {
-            getMonthDivId,
-            getMonthDivComparisonId: (month) => `${getMonthDivId(month)}-comparison`,
-            getNormalizedDayOfWeek: (momentDate) => {
-                let weekday = momentDate.weekday();
-                return weekday === 0 ? 6 : weekday - 1;
-            },
-            getDateTargetHours: (momentDate) =>
-                momentDate.weekday() > 0 && momentDate.weekday() < 6 ? DAILY_WORK_HOURS : 0,
-        };
-    }
-})();
+(function (translationService, timesService) {
+    translationService.fixCurrentWeekTranslation();
+    timesService.init();
+})(new TranslationService(), new AdditionalTimesService(new UiService()));
