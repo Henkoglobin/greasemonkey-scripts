@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        primaERP - Total Hours Worked
 // @description Displays the total time worked in any week. Also fixes some bad translations.
-// @author      Henrik Ilgen, https://github.com/henkoglobin; Johannes Feige,https://github.com/johannesfeige
+// @author      Johannes Feige, https://github.com/johannesfeige; Henrik Ilgen, https://github.com/henkoglobin
 // @version     0.0.5
 // @grant       none
 // @match       https://*.primaerp.com/
