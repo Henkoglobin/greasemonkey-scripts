@@ -8,6 +8,9 @@
 // @require     https://cdnjs.cloudflare.com/ajax/libs/rxjs/6.5.4/rxjs.umd.js
 // ==/UserScript==
 
+window.Rx = rxjs;
+const { distinct, map, tap, flatMap, mergeAll } = rxjs.operators;
+
 class TranslationService {
     fixCurrentWeekTranslation() {
         const weektime = window.messages.content.dashboard.panels.weektime;
@@ -40,12 +43,14 @@ class UiService {
     };
 
     initWeekCharts = (startOfMonths) => {
+        $(`div[id^="${this.MONTH_DIV_PREFIX}"]`).remove();
         startOfMonths.forEach((startOfMonth) => {
             const $parent = $(`#${this.WEEK_CHART_ID}`).parent();
             const $monthDiv = $('<div>', {
                 class: 'desktop-panel',
                 id: this._getMonthDivId(startOfMonth),
             }).appendTo($parent);
+
             const $heading = $('<div>', { class: 'desktop-panel-heading' }).appendTo($monthDiv);
 
             $('<h2>')
@@ -64,18 +69,14 @@ class UiService {
     _getMonthComparisonDivId = (startOfMonth) => `${this._getMonthDivId(startOfMonth)}-comparison`;
 }
 
-/**
- * @class
- */
 class AdditionalTimesService {
     _weekReportRequestUrl = '/reports/ajaxWeekTimeReport';
 
-    _dailyWorkHours = 8;
-    _monthCount = 2;
-
-    _startOfMonths = [...Array(this._monthCount).keys()].map((subtractValue) =>
-        moment().startOf('month').subtract(subtractValue, 'month')
-    );
+    _dailyWorkHours$;
+    _monthCount$;
+    _weekTimes$;
+    _monthTimes$;
+    _startOfMonths$;
 
     /**
      * @type {UiService}
@@ -84,11 +85,56 @@ class AdditionalTimesService {
 
     constructor(uiService) {
         this._uiService = uiService;
+
+        this._dailyWorkHours$ = new Rx.BehaviorSubject(8);
+        this._monthCount$ = new Rx.BehaviorSubject(2);
+
+        this._weekTimes$ = new Rx.BehaviorSubject([]);
+        this._monthTimes$ = new Rx.BehaviorSubject([]);
+
+        this._startOfMonths$ = this._monthCount$.pipe(
+            map((monthCount) => {
+                return [...Array(monthCount).keys()].map((index) => moment().startOf('month').subtract(index, 'month'));
+            })
+        );
+
+        window.updateDailyWorkHours = (value) => {
+            this._dailyWorkHours$.next(value);
+        };
+
+        window.updateMonthCount = (value) => {
+            this._monthCount$.next(value);
+        };
     }
 
     init() {
         this._createWeekTimeChartObserver();
-        this._uiService.initWeekCharts(this._startOfMonths);
+
+        this._weekTimes$.pipe(tap(this._updateTotalTime)).subscribe();
+
+        this._startOfMonths$
+            .pipe(
+                tap((startOfMonths) => {
+                    this._uiService.initWeekCharts(startOfMonths);
+                })
+            )
+            .subscribe();
+
+        Rx.combineLatest(this._startOfMonths$, this._dailyWorkHours$, this._weekTimes$)
+            .pipe(
+                flatMap(([startOfMonths, dailyWorkHours, weekTimes]) =>
+                    Rx.iif(
+                        () => weekTimes && weekTimes.length,
+                        startOfMonths.map((startOfMonth) => this._getTimesPerMonth(startOfMonth))
+                    ).pipe(
+                        mergeAll(),
+                        map((data) => this._enrichTargetHours(data, dailyWorkHours))
+                    )
+                ),
+                tap(console.log),
+                tap((data) => this._updateTimesPerMonth(data))
+            )
+            .subscribe();
     }
 
     _createWeekTimeChartObserver = () => {
@@ -102,23 +148,18 @@ class AdditionalTimesService {
     };
 
     _weekTimeChartChangeHandler = () => {
-        this._updateTotalTime();
-        this._updateMonthTimes(this._startOfMonths, this._dailyWorkHours);
+        if (this._weekTimes$.value !== window.weekChartData) {
+            this._weekTimes$.next(window.weekChartData);
+        }
     };
 
-    _updateTotalTime = () => {
-        if (!window.weekChartData) {
+    _updateTotalTime = (weekTimes) => {
+        if (!weekTimes) {
             return;
         }
 
-        const sum = window.weekChartData.sum((x) => x.value);
+        const sum = weekTimes.sum((x) => x.value);
         this._uiService.updateTotalTime(sum);
-    };
-
-    _updateMonthTimes = (months, dailyWorkHours) => {
-        months.forEach((month) => {
-            this._getTimesPerMonth(month).then((data) => this._updateTimesPerMonth(data, dailyWorkHours));
-        });
     };
 
     _getTimesPerMonth = (startOfMonth) => {
@@ -153,22 +194,24 @@ class AdditionalTimesService {
             };
         });
 
-        return Promise.all(requests.map((x) => fetch(x.request, x.init)))
-            .then((responses) => Promise.all(responses.map((response) => response.json())))
-            .then((data) => data.flat(1))
-            .then((data) => this._primaMonthPreparation(data, startOfMonth, endOfMonth));
+        return Rx.forkJoin(requests.map((x) => fetch(x.request, x.init))).pipe(
+            flatMap((responses) => Rx.forkJoin(responses.map((response) => response.json()))),
+            map((data) => data.flat(1)),
+            map((data) => this._enrichPrimaTimes(data, startOfMonth, endOfMonth))
+        );
     };
 
     /**
      * Preparation of months because ajayWeekTimeReport return whole week
      * (also including Days of previous or following months)
-     * Also enchric target per day and moment date
+     * Also enriching moment date
      * @param {Array} data
      * @param {Date} startOfMonth
      * @param {Date} endOfMonth
      * @returns {Array} processed Data
      */
-    _primaMonthPreparation = (data, startOfMonth, endOfMonth) => {
+    _enrichPrimaTimes = (data, startOfMonth, endOfMonth) => {
+        console.log('primaMonthPrep', data, startOfMonth, endOfMonth);
         const startOfMonthWeekDay = this._getNormalizedDayOfWeek(startOfMonth);
         const endOfMonthWeekDay = this._getNormalizedDayOfWeek(endOfMonth);
 
@@ -181,19 +224,21 @@ class AdditionalTimesService {
             data.splice(-carryover, carryover);
         }
 
-        let dateCounter = 0;
-
-        data.forEach((item) => {
-            item.momentDate = startOfMonth.clone().add(dateCounter, 'day');
-            item.targetHours = this._getDateTargetHours(item.momentDate);
-            item.balance = item.value - item.targetHours;
-            dateCounter++;
-        });
-
-        return data;
+        return data.map((item, index) => ({
+            ...item,
+            momentDate: startOfMonth.clone().add(index, 'day'),
+        }));
     };
 
-    _updateTimesPerMonth = (data, dailyWorkHours) => {
+    _enrichTargetHours = (data, dailyWorkHours) =>
+        data.map((item) => {
+            item.targetHours = this._getDateTargetHours(item.momentDate, dailyWorkHours);
+            item.balance = item.value - item.targetHours;
+
+            return item;
+        });
+
+    _updateTimesPerMonth = (data) => {
         const [startOfMonth] = data;
 
         const times = [
@@ -203,7 +248,7 @@ class AdditionalTimesService {
             },
             {
                 title: 'Target',
-                value: data.filter((x) => x.day !== 'Sat' && x.day !== 'Sun').length * dailyWorkHours,
+                value: data.sum((x) => x.targetHours),
             },
             {
                 title: 'Balance (today)',
@@ -218,8 +263,8 @@ class AdditionalTimesService {
         const weekday = momentDate.weekday();
         return weekday === 0 ? 6 : weekday - 1;
     };
-    _getDateTargetHours = (momentDate) =>
-        momentDate.weekday() > 0 && momentDate.weekday() < 6 ? this._dailyWorkHours : 0;
+    _getDateTargetHours = (momentDate, dailyWorkHours) =>
+        momentDate.weekday() > 0 && momentDate.weekday() < 6 ? dailyWorkHours : 0;
 }
 
 (function (translationService, timesService) {
